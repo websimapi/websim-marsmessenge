@@ -277,6 +277,35 @@ body {
     color: var(--accent-color-secondary);
 }
 
+.chat-message .message-content .play-tts-button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--accent-color-secondary);
+    color: var(--accent-color-secondary);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin-top: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s, color 0.3s;
+}
+.chat-message .message-content .play-tts-button:hover {
+    background: var(--accent-color-secondary);
+    color: white;
+}
+.chat-message .message-content .play-tts-button:disabled {
+    background: #555;
+    color: #999;
+    cursor: not-allowed;
+}
+.chat-message .message-content .play-tts-button svg {
+    width: 18px;
+    height: 18px;
+}
+
 .system-message {
     align-self: center;
     background-color: rgba(0, 170, 255, 0.1);
@@ -298,28 +327,60 @@ body {
     gap: 10px;
 }
 
-#attach-button {
+#attach-button, #record-button {
     background-color: var(--tertiary-bg);
     border: 1px solid var(--border-color);
     color: var(--text-color);
     padding: 0 12px;
     border-radius: var(--border-radius);
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: background-color 0.3s, color 0.3s;
     display: flex;
     justify-content: center;
     align-items: center;
     flex-shrink: 0;
+    position: relative;
 }
 
-#attach-button:hover {
+#attach-button:hover, #record-button:hover {
     background-color: #4a4a50;
 }
 
-#attach-button:disabled {
+#attach-button:disabled, #record-button:disabled {
     background-color: #2a2a2e;
     color: #666;
     cursor: not-allowed;
+}
+
+#record-button.recording {
+    background-color: var(--accent-color-dim);
+    color: white;
+    animation: pulse-red 1.5s infinite;
+}
+
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(255, 69, 0, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(255, 69, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 69, 0, 0); }
+}
+
+#record-timer {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--accent-color);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: none; /* Hidden by default */
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+#record-button.recording #record-timer {
+    display: flex;
 }
 
 #chat-input {

@@ -1,7 +1,7 @@
 import confetti from "canvas-confetti";
 
 const AI_AVATAR = "icon.png";
-const AI_PROMPT_COMPOSER = `You are "Mission Control", a helpful AI assistant on Mars. Your job is to help the user compose a message to send back to another user. Converse with them naturally to understand what they want to say. Help them articulate their thoughts and feelings. Keep your responses concise, friendly, and encouraging. Your name is MC. If the user attaches an image, acknowledge it and continue the conversation. When you believe the message text is complete and the user is ready to send it, end your response with the exact phrase "[READY_TO_TRANSMIT]".`;
+const AI_PROMPT_COMPOSER = `You are "Mission Control", a helpful AI assistant on Mars. Your job is to help the user compose a message to send back to another user. Converse with them naturally to understand what they want to say. Help them articulate their thoughts and feelings. Keep your responses concise, friendly, and encouraging. Your name is MC. If the user attaches an image or voice sample, acknowledge it and continue the conversation. When you believe the message text is complete and the user is ready to send it, end your response with the exact phrase "[READY_TO_TRANSMIT]".`;
 const AI_PROMPT_JSON_GENERATOR = `You are a data-structuring AI. Based on the provided conversation history, create a detailed JSON object that captures the essence of the message. The JSON must have the following structure:
 {
   "subject": "A brief subject line for the message.",
@@ -15,10 +15,12 @@ const AI_PROMPT_JSON_GENERATOR = `You are a data-structuring AI. Based on the pr
     "secondary": "e.g., 'nostalgic', 'curious'"
   },
   "attached_image_description": "A highly detailed description of an image that was part of the conversation. If no image was attached, this MUST be null.",
+  "voice_sample_url": "The URL of an attached voice sample file for TTS cloning. If no sample was attached, this MUST be null.",
   "full_message_text": "The complete, formatted message that the user wants to send, as composed during the conversation.",
   "raw_conversation_summary": "A summary of the conversation that led to this message."
 }
 If the user provided an image, its detailed description will be provided separately below the main conversation history, marked with [SEPARATE_IMAGE_DESCRIPTION_FOR_JSON]. You MUST extract this description and place it in the 'attached_image_description' field. If no such description is provided, you MUST set 'attached_image_description' to null.
+If a user provided a voice sample, its URL will be provided separately below the main conversation history, marked with [SEPARATE_VOICE_SAMPLE_URL_FOR_JSON]. You MUST extract this URL and place it in the 'voice_sample_url' field. If no such URL is provided, you MUST set 'voice_sample_url' to null.
 Respond ONLY with the JSON object and no other text.`;
 const AI_PROMPT_COURIER = `You are "Message Relay", an AI courier. You have just received a data packet from another planet. Your task is to deliver this message to the user. The data is in JSON format.
 Your instructions on how to proceed, including whether an image was attached and successfully reconstructed, are provided in a [CONTEXT_FOR_YOU] block. Follow those instructions first.
@@ -37,6 +39,8 @@ const loadingIndicator = document.getElementById('loading-indicator');
 const transmissionsList = document.getElementById('transmissions-list');
 const attachButton = document.getElementById('attach-button');
 const imageUploadInput = document.getElementById('image-upload');
+const recordButton = document.getElementById('record-button');
+const recordTimerSpan = document.getElementById('record-timer');
 
 // --- App State ---
 let conversationHistory = [];
@@ -44,6 +48,11 @@ let selectedRecipientId = null;
 let appMode = 'composing'; // 'composing' or 'receiving'
 let isMessageReadyToTransmit = false;
 let attachedImageDescription = null;
+let attachedVoiceSampleUrl = null;
+let currentMessageData = null; // for receiver
+let mediaRecorder = null;
+let recordingChunks = [];
+let recordingTimer = null;
 
 // --- Main Initialization ---
 async function initialize() {
@@ -66,6 +75,7 @@ async function initialize() {
 
     attachButton.addEventListener('click', () => imageUploadInput.click());
     imageUploadInput.addEventListener('change', handleImageUpload);
+    recordButton.addEventListener('click', handleRecordButtonClick);
 
     renderPeers();
 }
@@ -73,6 +83,9 @@ async function initialize() {
 // --- Conversation & AI ---
 
 function resetConversation(systemPrompt, welcomeMessage) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
     appMode = 'composing';
     conversationHistory = [{
         role: "system",
@@ -83,12 +96,15 @@ function resetConversation(systemPrompt, welcomeMessage) {
     selectedRecipientId = null;
     isMessageReadyToTransmit = false;
     attachedImageDescription = null;
+    attachedVoiceSampleUrl = null;
+    currentMessageData = null;
     finalizeButton.classList.add('hidden');
     chatInput.placeholder = "Talk to Mission Control to compose your message...";
 }
 
 async function startReceivingConversation(messageData) {
     appMode = 'receiving';
+    currentMessageData = messageData;
     chatMessages.innerHTML = '';
     conversationHistory = [];
     chatInput.placeholder = "Talk to Message Relay about the received message...";
@@ -165,7 +181,18 @@ async function getAiResponse() {
         } else {
             conversationHistory.push(completion);
             const aiName = appMode === 'composing' ? 'MC' : 'MR';
-            addMessageToChat('ai', aiResponse, aiName);
+            
+            let audioData = null;
+            // Check if we are in 'receiving' mode, if there's voice data,
+            // and if this is the first AI message in this conversation.
+            if (appMode === 'receiving' && currentMessageData?.voice_sample_url && conversationHistory.filter(m => m.role === 'assistant').length === 1) {
+                audioData = {
+                    voiceSampleUrl: currentMessageData.voice_sample_url,
+                    textToSpeak: currentMessageData.full_message_text,
+                };
+            }
+
+            addMessageToChat('ai', aiResponse, aiName, null, audioData);
             toggleLoading(false); // Turn off loader on normal response
         }
 
@@ -237,7 +264,7 @@ function selectRecipient(peerId, username) {
     }
 }
 
-function addMessageToChat(sender, text, username, imageUrl = null) {
+function addMessageToChat(sender, text, username, imageUrl = null, audioData = null) {
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${sender}`;
     if (imageUrl && !text) {
@@ -275,6 +302,56 @@ function addMessageToChat(sender, text, username, imageUrl = null) {
         messageEl.querySelector('.message-content').appendChild(img);
     }
 
+    if (audioData && audioData.voiceSampleUrl && audioData.textToSpeak) {
+        const playButton = document.createElement('button');
+        playButton.className = 'play-tts-button';
+        playButton.title = "Hear this message";
+        const playIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.647c1.295.742 1.295 2.545 0 3.286L7.279 20.99c-1.25.717-2.779-.217-2.779-1.643V5.653z" clip-rule="evenodd" /></svg>`;
+        const stopIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.5 7.5a3 3 0 013-3h9a3 3 0 013 3v9a3 3 0 01-3 3h-9z" clip-rule="evenodd" /></svg>`;
+        playButton.innerHTML = playIcon;
+        
+        let audio = null;
+
+        playButton.addEventListener('click', async () => {
+            if (playButton.dataset.playing === 'true' && audio) {
+                audio.pause();
+                audio.currentTime = 0;
+                playButton.dataset.playing = 'false';
+                playButton.innerHTML = playIcon;
+                playButton.disabled = false;
+                return;
+            }
+            if (playButton.disabled) return;
+
+            playButton.disabled = true;
+            playButton.innerHTML = '...';
+
+            try {
+                const result = await websim.textToSpeech({
+                    text: audioData.textToSpeak,
+                    voice_sample: audioData.voiceSampleUrl,
+                });
+                audio = new Audio(result.url);
+                audio.play();
+
+                playButton.dataset.playing = 'true';
+                playButton.innerHTML = stopIcon;
+                playButton.disabled = false;
+
+                audio.onended = () => {
+                    playButton.dataset.playing = 'false';
+                    playButton.innerHTML = playIcon;
+                };
+            } catch (err) {
+                console.error("TTS failed:", err);
+                playButton.disabled = false;
+                playButton.innerHTML = playIcon;
+                addSystemMessage("Could not generate audio for this message.");
+            }
+        });
+        messageEl.querySelector('.message-content').appendChild(playButton);
+    }
+
     chatMessages.appendChild(messageEl);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -294,11 +371,13 @@ function toggleLoading(isLoading) {
         sendButton.disabled = true;
         chatInput.disabled = true;
         attachButton.disabled = true;
+        recordButton.disabled = true;
     } else {
         loadingIndicator.classList.add('hidden');
         sendButton.disabled = false;
         chatInput.disabled = false;
         attachButton.disabled = false;
+        recordButton.disabled = false;
         chatInput.focus();
     }
 }
@@ -404,6 +483,110 @@ async function handleImageUpload(e) {
 }
 
 
+// --- Voice Recording Logic ---
+
+function handleRecordButtonClick() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+async function startRecording() {
+    if (appMode !== 'composing') {
+        addSystemMessage("You can only attach files when composing a new message.");
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        
+        recordButton.classList.add('recording');
+        recordButton.disabled = true; // Briefly disable to prevent double clicks
+        setTimeout(() => { if(recordButton.classList.contains('recording')) recordButton.disabled = false }, 1000); // Re-enable so user can stop it
+
+        mediaRecorder = new MediaRecorder(stream);
+        recordingChunks = [];
+        mediaRecorder.ondataavailable = event => {
+            recordingChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            // Clean up stream
+            stream.getTracks().forEach(track => track.stop());
+            
+            // UI updates
+            recordButton.classList.remove('recording');
+            recordTimerSpan.style.display = 'none';
+            if (recordingTimer) clearInterval(recordingTimer);
+
+            if (recordingChunks.length === 0) {
+                addSystemMessage("Recording was too short or failed.");
+                return;
+            }
+            
+            addSystemMessage("Processing voice sample...");
+            toggleLoading(true);
+
+            const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
+            const audioFile = new File([audioBlob], "voice_sample.webm", { type: 'audio/webm' });
+
+            try {
+                const url = await websim.upload(audioFile);
+                attachedVoiceSampleUrl = url;
+                conversationHistory.push({ role: 'assistant', content: `(System note: User attached a voice sample. The URL is ${url})` });
+                addMessageToChat('ai', "I've processed your voice sample. This will be used to read your message to the recipient. How should we continue?", 'MC');
+            } catch (err) {
+                console.error("Error uploading voice sample:", err);
+                addSystemMessage("Failed to upload voice sample. Please try again.");
+            } finally {
+                toggleLoading(false);
+            }
+        };
+
+        mediaRecorder.start();
+        addSystemMessage("Recording started... (max 5 seconds)");
+
+        // Countdown timer
+        let timeLeft = 5;
+        recordTimerSpan.textContent = timeLeft;
+        recordTimerSpan.style.display = 'flex';
+        recordingTimer = setInterval(() => {
+            timeLeft--;
+            recordTimerSpan.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(recordingTimer);
+                if (mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                }
+            }
+        }, 1000);
+
+        // Auto-stop after 5 seconds
+        setTimeout(() => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopRecording();
+            }
+        }, 5000);
+
+    } catch (err) {
+        console.error("Error accessing microphone:", err);
+        addSystemMessage("Could not access microphone. Please check your browser permissions.");
+        recordButton.classList.remove('recording');
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        if (recordingTimer) clearInterval(recordingTimer);
+        recordTimerSpan.style.display = 'none';
+        addSystemMessage("Recording stopped.");
+    }
+}
+
+
 async function handleFinalizeAndTransmit() {
     if (finalizeButton.disabled) return;
 
@@ -422,6 +605,9 @@ async function handleFinalizeAndTransmit() {
         let jsonUserContent = `Based on our conversation, create the JSON data packet. Here is the history:\n\n${JSON.stringify(conversationHistory)}`;
         if (attachedImageDescription) {
             jsonUserContent += `\n\n[SEPARATE_IMAGE_DESCRIPTION_FOR_JSON]\n${attachedImageDescription}`;
+        }
+        if (attachedVoiceSampleUrl) {
+            jsonUserContent += `\n\n[SEPARATE_VOICE_SAMPLE_URL_FOR_JSON]\n${attachedVoiceSampleUrl}`;
         }
         
         const jsonPrompt = {
