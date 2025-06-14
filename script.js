@@ -16,6 +16,7 @@ const AI_PROMPT_JSON_GENERATOR = `You are a data-structuring AI. Based on the pr
   },
   "attached_image_description": "A highly detailed description of an image that was part of the conversation. If no image was attached, this MUST be null.",
   "voice_sample_url": "The URL of an attached voice sample file for TTS cloning. If no sample was attached, this MUST be null.",
+  "voice_clone_permission_granted": "A boolean indicating if the sender allows their voice sample to be used for follow-up conversation by the AI. You MUST infer this from the conversation or assume false if not mentioned. This field will be programmatically overridden later, so your value is a suggestion.",
   "full_message_text": "The complete, formatted message that the user wants to send, as composed during the conversation.",
   "raw_conversation_summary": "A summary of the conversation that led to this message."
 }
@@ -23,7 +24,7 @@ If the user provided an image, its detailed description will be provided separat
 If a user provided a voice sample, its URL will be provided separately below the main conversation history, marked with [SEPARATE_VOICE_SAMPLE_URL_FOR_JSON]. You MUST extract this URL and place it in the 'voice_sample_url' field. If no such URL is provided, you MUST set 'voice_sample_url' to null.
 Respond ONLY with the JSON object and no other text.`;
 const AI_PROMPT_COURIER = `You are "Message Relay", an AI courier. You have just received a data packet from another planet. Your task is to deliver this message to the user. The data is in JSON format.
-Your instructions on how to proceed, including whether an image was attached and successfully reconstructed, are provided in a [CONTEXT_FOR_YOU] block. Follow those instructions first.
+Your instructions on how to proceed, including handling attachments and voice permissions, are provided in a [CONTEXT_FOR_YOU] block. Follow those instructions first.
 After handling any attachments as instructed, deliver the message contained in the \`full_message_text\` field. Deliver it verbatim, as if you are reading a letter from the sender. Use the \`from_persona\` and \`emotional_tone\` to inform your delivery style. After delivering the message, remain available to answer any questions the user might have about it, using the entire JSON object as your context. Your name is MR.`;
 
 const room = new WebsimSocket();
@@ -41,6 +42,10 @@ const attachButton = document.getElementById('attach-button');
 const imageUploadInput = document.getElementById('image-upload');
 const recordButton = document.getElementById('record-button');
 const recordTimerSpan = document.getElementById('record-timer');
+const settingsButton = document.getElementById('settings-button');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsButton = document.getElementById('close-settings-button');
+const allowVoiceReuseToggle = document.getElementById('allow-voice-reuse-toggle');
 
 // --- App State ---
 let conversationHistory = [];
@@ -49,6 +54,9 @@ let appMode = 'composing'; // 'composing' or 'receiving'
 let isMessageReadyToTransmit = false;
 let attachedImageDescription = null;
 let attachedVoiceSampleUrl = null;
+let settings = {
+    allowVoiceReuse: false,
+};
 let currentMessageData = null; // for receiver
 let mediaRecorder = null;
 let recordingChunks = [];
@@ -76,8 +84,57 @@ async function initialize() {
     attachButton.addEventListener('click', () => imageUploadInput.click());
     imageUploadInput.addEventListener('change', handleImageUpload);
     recordButton.addEventListener('click', handleRecordButtonClick);
+    
+    // Settings Listeners
+    loadSettings();
+    settingsButton.addEventListener('click', openSettingsModal);
+    closeSettingsButton.addEventListener('click', closeSettingsModal);
+    allowVoiceReuseToggle.addEventListener('change', handleSettingChange);
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeSettingsModal();
+    });
 
     renderPeers();
+}
+
+// --- Settings Functions ---
+
+function loadSettings() {
+    try {
+        const storedSettings = localStorage.getItem('marsMessengerSettings');
+        if (storedSettings) {
+            const parsedSettings = JSON.parse(storedSettings);
+            // Ensure all keys exist to prevent errors with old formats
+            settings.allowVoiceReuse = parsedSettings.allowVoiceReuse || false;
+        }
+    } catch (e) {
+        console.error("Could not load settings from localStorage", e);
+        settings = { allowVoiceReuse: false }; // Reset to default on error
+    }
+}
+
+function saveSettings() {
+    try {
+        localStorage.setItem('marsMessengerSettings', JSON.stringify(settings));
+    } catch (e) {
+        console.error("Could not save settings to localStorage", e);
+    }
+}
+
+function openSettingsModal() {
+    allowVoiceReuseToggle.checked = settings.allowVoiceReuse;
+    settingsModal.classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    settingsModal.classList.add('hidden');
+}
+
+function handleSettingChange(e) {
+    if (e.target.id === 'allow-voice-reuse-toggle') {
+        settings.allowVoiceReuse = e.target.checked;
+        saveSettings();
+    }
 }
 
 // --- Conversation & AI ---
@@ -133,8 +190,17 @@ async function startReceivingConversation(messageData) {
         }
         toggleLoading(false);
     }
+
+    let voiceInfoForPrompt = "No voice sample was attached.";
+    if (messageData.voice_sample_url) {
+        if (messageData.voice_clone_permission_granted) {
+            voiceInfoForPrompt = "A voice sample was attached. The sender has GRANTED permission for you to use their voice for all of your responses in this conversation. You should use it to speak your messages.";
+        } else {
+            voiceInfoForPrompt = "A voice sample was attached. The sender has DENIED permission for you to use their voice for follow-up chat. You should ONLY use it to deliver the initial message, and then respond in text only for any follow-up questions.";
+        }
+    }
     
-    const courierSystemPrompt = `${AI_PROMPT_COURIER}\n\n[CONTEXT_FOR_YOU]\n${imageInfoForPrompt}`;
+    const courierSystemPrompt = `${AI_PROMPT_COURIER}\n\n[CONTEXT_FOR_YOU]\n${imageInfoForPrompt}\n${voiceInfoForPrompt}`;
 
     conversationHistory = [{
         role: 'system',
@@ -183,13 +249,18 @@ async function getAiResponse() {
             const aiName = appMode === 'composing' ? 'MC' : 'MR';
             
             let audioData = null;
-            // Check if we are in 'receiving' mode, if there's voice data,
-            // and if this is the first AI message in this conversation.
-            if (appMode === 'receiving' && currentMessageData?.voice_sample_url && conversationHistory.filter(m => m.role === 'assistant').length === 1) {
-                audioData = {
-                    voiceSampleUrl: currentMessageData.voice_sample_url,
-                    textToSpeak: currentMessageData.full_message_text,
-                };
+            if (appMode === 'receiving' && currentMessageData?.voice_sample_url) {
+                // isFirstAiMessage is determined by checking how many assistant messages are in history.
+                // Since we just pushed the current one, the count will be 1 for the first message.
+                const isFirstAiMessage = conversationHistory.filter(m => m.role === 'assistant').length === 1;
+                const permissionGranted = currentMessageData.voice_clone_permission_granted === true;
+        
+                if (isFirstAiMessage || permissionGranted) {
+                    audioData = {
+                        voiceSampleUrl: currentMessageData.voice_sample_url,
+                        textToSpeak: aiResponse, // The text to speak is always the AI's latest response.
+                    };
+                }
             }
 
             addMessageToChat('ai', aiResponse, aiName, null, audioData);
@@ -311,6 +382,7 @@ function addMessageToChat(sender, text, username, imageUrl = null, audioData = n
         playButton.innerHTML = playIcon;
         
         let audio = null;
+        let currentAudioUrl = null;
 
         playButton.addEventListener('click', async () => {
             if (playButton.dataset.playing === 'true' && audio) {
@@ -327,11 +399,16 @@ function addMessageToChat(sender, text, username, imageUrl = null, audioData = n
             playButton.innerHTML = '...';
 
             try {
-                const result = await websim.textToSpeech({
-                    text: audioData.textToSpeak,
-                    voice_sample: audioData.voiceSampleUrl,
-                });
-                audio = new Audio(result.url);
+                // Generate new audio only if it hasn't been generated before for this message
+                if (!currentAudioUrl) {
+                    const result = await websim.textToSpeech({
+                        text: audioData.textToSpeak,
+                        voice_sample: audioData.voiceSampleUrl,
+                    });
+                    currentAudioUrl = result.url;
+                }
+                
+                audio = new Audio(currentAudioUrl);
                 audio.play();
 
                 playButton.dataset.playing = 'true';
@@ -627,6 +704,9 @@ async function handleFinalizeAndTransmit() {
         });
 
         const jsonPayload = JSON.parse(completion.content);
+        // Manually inject the setting from app state, overriding any AI hallucination.
+        jsonPayload.voice_clone_permission_granted = settings.allowVoiceReuse;
+
         addSystemMessage("Data packet generated. Beginning transmission...");
         startTransmission(JSON.stringify(jsonPayload), selectedRecipientId);
         

@@ -201,6 +201,24 @@ body {
     justify-content: space-between;
 }
 
+#settings-button {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+#settings-button:hover {
+    background-color: var(--tertiary-bg);
+    color: var(--accent-color);
+}
+
 .header-icon {
     width: 30px;
     height: 30px;
@@ -466,6 +484,128 @@ body {
 
 .hidden {
     display: none !important;
+}
+
+/* Settings Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: var(--secondary-bg);
+    padding: 30px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.modal-content h2 {
+    font-family: var(--font-family-title);
+    color: var(--accent-color);
+    margin: 0;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+}
+
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+}
+
+.setting-label {
+    font-size: 1.1em;
+    line-height: 1.4;
+}
+
+.setting-description {
+    font-size: 0.9em;
+    color: #aaa;
+    line-height: 1.5;
+    margin-top: -10px;
+}
+
+.modal-close-button {
+    background-color: var(--accent-color);
+    border: none;
+    color: white;
+    padding: 12px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: background-color 0.3s;
+    font-family: var(--font-family-body);
+    font-size: 1em;
+    font-weight: bold;
+    align-self: flex-end;
+    min-width: 100px;
+}
+
+.modal-close-button:hover {
+    background-color: var(--accent-color-dim);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+    flex-shrink: 0;
+}
+
+.toggle-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--tertiary-bg);
+    transition: .4s;
+    border-radius: 34px;
+    border: 1px solid var(--border-color);
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+.toggle-input:checked + .toggle-slider {
+    background-color: var(--accent-color-secondary);
+}
+
+.toggle-input:checked + .toggle-slider:before {
+    transform: translateX(26px);
 }
 
 /* Scrollbar styles */

@@ -32,6 +32,9 @@
                         <img src="icon.png" alt="Mars Icon" class="header-icon">
                         Mars Messenger
                     </div>
+                    <button id="settings-button" title="Settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.947 1.52l-.568 1.986c-.42.146-.82.33-1.2.558l-1.954-.488a1.875 1.875 0 00-2.115.334l-1.5 2.598a1.875 1.875 0 00.333 2.116l1.52 1.521c-.03.16-.053.323-.066.487l-1.986.568a1.875 1.875 0 00-1.52 1.947v1.875c0 .917.663 1.699 1.52 1.947l1.986.568c.146.42.33.82.558 1.2l-.488 1.954a1.875 1.875 0 00.334 2.115l2.598 1.5a1.875 1.875 0 002.116-.333l1.521-1.52c.16.03.323.053.487.066l.568 1.986a1.875 1.875 0 001.947 1.52h1.875c.917 0 1.699-.663 1.947-1.52l.568-1.986c.42-.146.82-.33 1.2-.558l1.954.488a1.875 1.875 0 002.115-.334l1.5-2.598a1.875 1.875 0 00-.333-2.116l-1.52-1.521c.03-.16.053-.323.066-.487l1.986-.568a1.875 1.875 0 001.52-1.947v-1.875c0-.917-.663-1.699-1.52-1.947l-1.986-.568c-.146-.42-.33-.82-.558-1.2l.488-1.954a1.875 1.875 0 00-.334-2.115l-2.598-1.5a1.875 1.875 0 00-2.116.333l-1.521 1.52c-.16-.03-.323-.053-.487-.066l-.568-1.986A1.875 1.875 0 0012.922 2.25H11.08zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" clip-rule="evenodd" /></svg>
+                    </button>
                 </div>
                 <div id="chat-messages">
                     <!-- Messages will be dynamically inserted here -->
@@ -56,6 +59,20 @@
                  <button id="finalize-button" class="hidden">Finalize &amp; Transmit to <span id="recipient-name"></span></button>
             </div>
         </div>
+    </div>
+    <div id="settings-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <h2>Advanced Settings</h2>
+        <div class="setting-item">
+          <label for="allow-voice-reuse-toggle" class="setting-label">Allow AI to use your voice sample for follow-up chat</label>
+          <div class="toggle-switch">
+            <input type="checkbox" id="allow-voice-reuse-toggle" class="toggle-input">
+            <label for="allow-voice-reuse-toggle" class="toggle-slider"></label>
+          </div>
+        </div>
+        <p class="setting-description">When enabled, the recipient's AI can use your voice sample to speak its responses during their entire conversation, not just for the initial message delivery.</p>
+        <button id="close-settings-button" class="modal-close-button">Close</button>
+      </div>
     </div>
     <script type="importmap">
     {
