@@ -69,6 +69,27 @@ async function initialize() {
 
     room.subscribePresence(handlePresenceUpdate);
     room.subscribeRoomState(handleRoomStateUpdate);
+    
+    // Handle connection/disconnection events
+    room.onmessage = (event) => {
+        const data = event.data;
+        switch (data.type) {
+            case "connected":
+                if (data.clientId !== room.clientId) {
+                    addSystemMessage(`${data.username} has joined from Mars Base`);
+                }
+                console.log(`Client ${data.clientId}, ${data.username} connected`);
+                break;
+            case "disconnected":
+                if (data.clientId !== room.clientId) {
+                    addSystemMessage(`${data.username} has left Mars Base`);
+                }
+                console.log(`Client ${data.clientId}, ${data.username} disconnected`);
+                break;
+            default:
+                console.log("Received event:", data);
+        }
+    };
 
     resetConversation(AI_PROMPT_COMPOSER, "Welcome to Mars Messenger! I'm Mission Control, or MC for short. Talk to me, and I'll help you compose your message. Who are we sending it to today?");
 
