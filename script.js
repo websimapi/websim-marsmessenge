@@ -78,10 +78,21 @@ async function initialize() {
                 console.log(`Client ${data.clientId}, ${data.username} connected`);
                 // Force a peer list re-render when someone connects
                 renderPeers();
+                // Broadcast a presence ping to all other clients to update their UI
+                room.send({
+                    type: "presence_update_ping",
+                    echo: false, // Don't send back to ourselves
+                    triggeredBy: data.clientId
+                });
                 break;
             case "disconnected":
                 console.log(`Client ${data.clientId}, ${data.username} disconnected`);
                 // Force a peer list re-render when someone disconnects
+                renderPeers();
+                break;
+            case "presence_update_ping":
+                // When we receive a ping from another client, update our peer list
+                console.log(`Received presence update ping from ${data.triggeredBy}`);
                 renderPeers();
                 break;
             default:
