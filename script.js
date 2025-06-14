@@ -69,29 +69,16 @@ async function initialize() {
 
     room.subscribePresence(handlePresenceUpdate);
     room.subscribeRoomState(handleRoomStateUpdate);
-    
-    // Handle connection/disconnection events
+
+    // Add an onmessage handler to robustly catch peer connection events.
     room.onmessage = (event) => {
-        const data = event.data;
-        switch (data.type) {
-            case "connected":
-                if (data.clientId !== room.clientId) {
-                    addSystemMessage(`🟢 ${data.username} has joined Mars Base`);
-                    // Play a subtle notification sound effect
-                    playNotificationSound('join');
-                }
-                console.log(`Client ${data.clientId}, ${data.username} connected`);
-                break;
-            case "disconnected":
-                if (data.clientId !== room.clientId) {
-                    addSystemMessage(`🔴 ${data.username} has left Mars Base`);
-                    // Play a subtle notification sound effect
-                    playNotificationSound('leave');
-                }
-                console.log(`Client ${data.clientId}, ${data.username} disconnected`);
-                break;
-            default:
-                console.log("Received event:", data);
+        const { data } = event;
+        // The 'connected' and 'disconnected' events are reliable for knowing when peers join or leave.
+        if (data.type === 'connected' || data.type === 'disconnected') {
+            // The presence subscription should also catch this, but this provides a fallback.
+            // We re-render the peer list to ensure it's up-to-date.
+            // The room.peers object is expected to be updated by the library before this message is dispatched.
+            renderPeers();
         }
     };
 
@@ -910,38 +897,6 @@ function audioBufferToWav(aBuffer) {
     }
 
     return new Blob([view], { type: "audio/wav" });
-}
-
-// --- Notification Sound Function ---
-
-function playNotificationSound(type) {
-    try {
-        // Create a subtle notification sound using Web Audio API
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        // Different tones for join/leave
-        if (type === 'join') {
-            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
-        } else {
-            oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
-            oscillator.frequency.setValueAtTime(400, audioContext.currentTime + 0.1);
-        }
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.2);
-    } catch (e) {
-        // Silently fail if audio context is not available
-        console.log("Audio notification not available");
-    }
 }
 
 // --- Start the app ---
