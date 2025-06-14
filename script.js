@@ -37,6 +37,7 @@ const transmissionsList = document.getElementById('transmissions-list');
 let conversationHistory = [];
 let selectedRecipientId = null;
 let appMode = 'composing'; // 'composing' or 'receiving'
+let isMessageReadyToTransmit = false;
 
 // --- Main Initialization ---
 async function initialize() {
@@ -71,6 +72,7 @@ function resetConversation(systemPrompt, welcomeMessage) {
     chatMessages.innerHTML = '';
     addMessageToChat('ai', welcomeMessage, "MC");
     selectedRecipientId = null;
+    isMessageReadyToTransmit = false;
     finalizeButton.classList.add('hidden');
     chatInput.placeholder = "Talk to Mission Control to compose your message...";
 }
@@ -117,16 +119,11 @@ async function getAiResponse() {
             conversationHistory.push({ role: 'assistant', content: aiResponse });
             addMessageToChat('ai', aiResponse, 'MC');
             
-            if (selectedRecipientId) {
-                // Use a slight delay so the user can read the AI's final message
-                // The loader is already active; handleFinalizeAndTransmit will manage it from here.
-                setTimeout(async () => {
-                    await handleFinalizeAndTransmit();
-                }, 1000);
-            } else {
-                addSystemMessage("Message is ready, but you haven't selected a recipient. Please select one from the list on the left to begin transmission.");
-                toggleLoading(false); // Turn off loader if we aren't transmitting
-            }
+            // Use a slight delay so the user can read the AI's final message
+            // handleFinalizeAndTransmit will now manage the logic from here.
+            setTimeout(() => {
+                handleFinalizeAndTransmit();
+            }, 1000);
 
         } else {
             conversationHistory.push(completion);
@@ -192,6 +189,11 @@ function selectRecipient(peerId, username) {
     recipientNameSpan.textContent = username;
     finalizeButton.classList.remove('hidden');
     renderPeers();
+
+    if (isMessageReadyToTransmit) {
+        addSystemMessage(`Recipient ${username} selected. Initiating transmission...`);
+        setTimeout(() => handleFinalizeAndTransmit(), 500);
+    }
 }
 
 function addMessageToChat(sender, text, username) {
@@ -289,7 +291,14 @@ function handleRoomStateUpdate() {
 }
 
 async function handleFinalizeAndTransmit() {
-    if (!selectedRecipientId || loadingIndicator.classList.contains('hidden') === false) return;
+    if (finalizeButton.disabled) return;
+
+    if (!selectedRecipientId) {
+        isMessageReadyToTransmit = true;
+        addSystemMessage("Message is ready. Please select a recipient from the list on the left to begin transmission.");
+        toggleLoading(false); // Turn off loading while we wait for user.
+        return;
+    }
 
     finalizeButton.disabled = true;
     finalizeButton.textContent = 'Generating Data Packet...';
@@ -320,7 +329,6 @@ async function handleFinalizeAndTransmit() {
     } catch (error) {
         console.error("Error generating JSON payload:", error);
         addSystemMessage("Error: Could not generate data packet. Please try again.");
-    } finally {
         toggleLoading(false);
         finalizeButton.disabled = false;
         finalizeButton.textContent = `Finalize & Transmit to ${recipientNameSpan.textContent}`;
