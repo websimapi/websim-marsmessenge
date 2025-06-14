@@ -530,9 +530,12 @@ async function startRecording() {
             toggleLoading(true);
 
             const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
-            const audioFile = new File([audioBlob], "voice_sample.webm", { type: 'audio/webm' });
 
             try {
+                addSystemMessage("Converting voice sample to WAV format...");
+                const wavBlob = await convertBlobToWav(audioBlob);
+                const audioFile = new File([wavBlob], "voice_sample.wav", { type: 'audio/wav' });
+
                 const url = await websim.upload(audioFile);
                 attachedVoiceSampleUrl = url;
                 conversationHistory.push({ role: 'assistant', content: `(System note: User attached a voice sample. The URL is ${url})` });
@@ -725,6 +728,84 @@ async function checkForCompletedTransmissions() {
     }
 }
 
+// --- Audio Conversion Utilities ---
+
+/**
+ * Converts a Blob (e.g., from MediaRecorder) to a WAV file Blob.
+ * @param {Blob} blob The input blob, likely in webm/opus format.
+ * @returns {Promise<Blob>} A promise that resolves with a new Blob in WAV format.
+ */
+async function convertBlobToWav(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    // Use a temporary AudioContext to decode the audio data.
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const wavBlob = audioBufferToWav(audioBuffer);
+    return wavBlob;
+}
+
+/**
+ * Converts an AudioBuffer to a WAV file Blob.
+ * @param {AudioBuffer} aBuffer The AudioBuffer to convert.
+ * @returns {Blob} A Blob containing the WAV file data.
+ */
+function audioBufferToWav(aBuffer) {
+    let numOfChan = aBuffer.numberOfChannels,
+        len = aBuffer.length * numOfChan * 2 + 44,
+        buffer = new ArrayBuffer(len),
+        view = new DataView(buffer),
+        channels = [],
+        i, sample,
+        offset = 0,
+        pos = 0;
+
+    // Helper function to write string to DataView
+    function writeString(s) {
+        for (let i = 0; i < s.length; i++) {
+            view.setUint8(pos + i, s.charCodeAt(i));
+        }
+        pos += s.length;
+    }
+
+    // RIFF chunk descriptor
+    writeString('RIFF');
+    view.setUint32(4, 36 + aBuffer.length * numOfChan * 2, true);
+    pos = 8;
+    writeString('WAVE');
+
+    // FMT sub-chunk
+    writeString('fmt ');
+    view.setUint32(16, 16, true); // Sub-chunk size
+    view.setUint16(20, 1, true); // Audio format (1 for PCM)
+    view.setUint16(22, numOfChan, true);
+    view.setUint32(24, aBuffer.sampleRate, true);
+    view.setUint32(28, aBuffer.sampleRate * numOfChan * 2, true); // Byte rate
+    view.setUint16(32, numOfChan * 2, true); // Block align
+    view.setUint16(34, 16, true); // Bits per sample
+    pos = 36;
+
+    // Data sub-chunk
+    writeString('data');
+    view.setUint32(40, aBuffer.length * numOfChan * 2, true);
+    pos = 44;
+
+    // Write interleaved PCM data
+    for (i = 0; i < numOfChan; i++) {
+        channels.push(aBuffer.getChannelData(i));
+    }
+
+    let length = aBuffer.length;
+    for (i = 0; i < length; i++) {
+        for (let chan = 0; chan < numOfChan; chan++) {
+            sample = Math.max(-1, Math.min(1, channels[chan][i]));
+            sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+            view.setInt16(pos, sample, true);
+            pos += 2;
+        }
+    }
+
+    return new Blob([view], { type: "audio/wav" });
+}
 
 // --- Start the app ---
 initialize();
