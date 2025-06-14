@@ -70,15 +70,22 @@ async function initialize() {
     room.subscribePresence(handlePresenceUpdate);
     room.subscribeRoomState(handleRoomStateUpdate);
 
-    // Add an onmessage handler to robustly catch peer connection events.
+    // Add message handler for connection events
     room.onmessage = (event) => {
-        const { data } = event;
-        // The 'connected' and 'disconnected' events are reliable for knowing when peers join or leave.
-        if (data.type === 'connected' || data.type === 'disconnected') {
-            // The presence subscription should also catch this, but this provides a fallback.
-            // We re-render the peer list to ensure it's up-to-date.
-            // The room.peers object is expected to be updated by the library before this message is dispatched.
-            renderPeers();
+        const data = event.data;
+        switch (data.type) {
+            case "connected":
+                console.log(`Client ${data.clientId}, ${data.username} connected`);
+                // Force a peer list re-render when someone connects
+                renderPeers();
+                break;
+            case "disconnected":
+                console.log(`Client ${data.clientId}, ${data.username} disconnected`);
+                // Force a peer list re-render when someone disconnects
+                renderPeers();
+                break;
+            default:
+                console.log("Received event:", data);
         }
     };
 
