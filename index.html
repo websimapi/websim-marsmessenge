@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mars Messenger</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app-container">
+        <div id="sidebar">
+            <div id="peers-container" class="sidebar-panel">
+                <h2><span class="online-indicator"></span>Online</h2>
+                <ul id="peers-list">
+                    <li class="peer-list-item-me">Connecting...</li>
+                </ul>
+            </div>
+            <div id="transmissions-container" class="sidebar-panel">
+                <h2>Transmissions</h2>
+                <div id="transmissions-list">
+                    <p class="no-transmissions">No active transmissions.</p>
+                </div>
+            </div>
+        </div>
+        <div id="main-content">
+            <div id="chat-container">
+                <div id="chat-header">
+                    <div>
+                        <img src="icon.png" alt="Mars Icon" class="header-icon">
+                        Mars Messenger
+                    </div>
+                </div>
+                <div id="chat-messages">
+                    <!-- Messages will be dynamically inserted here -->
+                </div>
+                 <div id="loading-indicator" class="hidden">
+                    <span></span><span></span><span></span>
+                </div>
+                <div id="chat-input-container">
+                    <textarea id="chat-input" placeholder="Talk to Mission Control to compose your message..."></textarea>
+                    <button id="send-button" title="Send message to AI assistant">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>
+                    </button>
+                </div>
+                 <button id="finalize-button" class="hidden">Finalize &amp; Transmit to <span id="recipient-name"></span></button>
+            </div>
+        </div>
+    </div>
+    <script type="importmap">
+    {
+        "imports": {
+            "canvas-confetti": "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.module.mjs"
+        }
+    }
+    </script>
+    <script type="module" src="script.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
+
