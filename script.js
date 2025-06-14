@@ -1,7 +1,7 @@
 import confetti from "canvas-confetti";
 
 const AI_AVATAR = "icon.png";
-const AI_PROMPT_COMPOSER = `You are "Mission Control", a helpful AI assistant on Mars. Your job is to help the user compose a message to send back to another user. Converse with them naturally to understand what they want to say. Help them articulate their thoughts and feelings. Keep your responses concise, friendly, and encouraging. Your name is MC.`;
+const AI_PROMPT_COMPOSER = `You are "Mission Control", a helpful AI assistant on Mars. Your job is to help the user compose a message to send back to another user. Converse with them naturally to understand what they want to say. Help them articulate their thoughts and feelings. Keep your responses concise, friendly, and encouraging. Your name is MC. When you believe the message is complete and the user is ready to send it, end your response with the exact phrase "[READY_TO_TRANSMIT]".`;
 const AI_PROMPT_JSON_GENERATOR = `You are a data-structuring AI. Based on the provided conversation history, create a detailed JSON object that captures the essence of the message. The JSON should be comprehensive enough for another AI to perfectly reconstruct the context, tone, and key points of the message. The JSON must have the following structure:
 {
   "subject": "A brief subject line for the message.",
@@ -110,15 +110,35 @@ async function getAiResponse() {
         const completion = await websim.chat.completions.create({
             messages: conversationHistory,
         });
-        const aiResponse = completion.content;
-        conversationHistory.push(completion);
-        const aiName = appMode === 'composing' ? 'MC' : 'MR';
-        addMessageToChat('ai', aiResponse, aiName);
+        let aiResponse = completion.content;
+        
+        if (appMode === 'composing' && aiResponse.includes('[READY_TO_TRANSMIT]')) {
+            aiResponse = aiResponse.replace('[READY_TO_TRANSMIT]', '').trim();
+            conversationHistory.push({ role: 'assistant', content: aiResponse });
+            addMessageToChat('ai', aiResponse, 'MC');
+            
+            if (selectedRecipientId) {
+                // Use a slight delay so the user can read the AI's final message
+                // The loader is already active; handleFinalizeAndTransmit will manage it from here.
+                setTimeout(async () => {
+                    await handleFinalizeAndTransmit();
+                }, 1000);
+            } else {
+                addSystemMessage("Message is ready, but you haven't selected a recipient. Please select one from the list on the left to begin transmission.");
+                toggleLoading(false); // Turn off loader if we aren't transmitting
+            }
+
+        } else {
+            conversationHistory.push(completion);
+            const aiName = appMode === 'composing' ? 'MC' : 'MR';
+            addMessageToChat('ai', aiResponse, aiName);
+            toggleLoading(false); // Turn off loader on normal response
+        }
+
     } catch (error) {
         console.error("Error getting AI response:", error);
         addMessageToChat('ai', "I seem to be having trouble connecting... please try again later.", "System");
-    } finally {
-        toggleLoading(false);
+        toggleLoading(false); // Turn off loader on error
     }
 }
 
@@ -129,26 +149,35 @@ function renderPeers() {
     if (!room.peers || !room.clientId) return;
     
     peersList.innerHTML = '';
-    const me = room.peers[room.clientId];
-
-    const meEl = document.createElement('li');
-    meEl.className = 'peer-list-item-me';
-    meEl.innerHTML = `<img src="${me.avatarUrl}" class="peer-avatar"> ${me.username} (You)`;
-    peersList.appendChild(meEl);
     
-    Object.values(room.peers)
-        .filter(peer => peer.id !== room.clientId)
-        .forEach(peer => {
-            const li = document.createElement('li');
-            li.className = 'peer-list-item';
-            li.dataset.peerId = peer.id;
+    const allPeers = Object.values(room.peers);
+
+    allPeers.sort((a, b) => {
+        if (a.id === room.clientId) return -1;
+        if (b.id === room.clientId) return 1;
+        return a.username.localeCompare(b.username);
+    });
+    
+    allPeers.forEach(peer => {
+        const li = document.createElement('li');
+        li.dataset.peerId = peer.id;
+        li.className = 'peer-list-item';
+        
+        const isMe = peer.id === room.clientId;
+        if (isMe) {
+            li.classList.add('peer-list-item-me');
+            li.innerHTML = `<img src="${peer.avatarUrl}" class="peer-avatar"> ${peer.username} (You)`;
+        } else {
             li.innerHTML = `<img src="${peer.avatarUrl}" class="peer-avatar"> ${peer.username}`;
-            if (peer.id === selectedRecipientId) {
-                li.classList.add('selected');
-            }
-            li.addEventListener('click', () => selectRecipient(peer.id, peer.username));
-            peersList.appendChild(li);
-        });
+        }
+        
+        if (peer.id === selectedRecipientId) {
+            li.classList.add('selected');
+        }
+        
+        li.addEventListener('click', () => selectRecipient(peer.id, peer.username));
+        peersList.appendChild(li);
+    });
 }
 
 function selectRecipient(peerId, username) {
@@ -385,4 +414,3 @@ function checkForCompletedTransmissions() {
 
 // --- Start the app ---
 initialize();
-

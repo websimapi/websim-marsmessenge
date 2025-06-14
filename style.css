@@ -111,7 +111,6 @@ body {
 .peer-list-item-me {
     color: var(--accent-color-secondary);
     font-style: italic;
-    cursor: default;
 }
 
 .peer-avatar {
@@ -386,5 +385,3 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
-
-
