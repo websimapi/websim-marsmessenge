@@ -58,6 +58,7 @@ let attachedVoiceSampleUrl = null;
 let settings = {
     allowVoiceReuse: false,
 };
+let lastRenderedPeerStateJSON = '';
 let currentMessageData = null; // for receiver
 let mediaRecorder = null;
 let recordingChunks = [];
@@ -72,7 +73,7 @@ async function initialize() {
     room.updatePresence({ lastActive: Date.now() });
     setInterval(() => {
         room.updatePresence({ lastActive: Date.now() });
-    }, 7000); // 7-second polling as requested
+    }, 15000); // Poll every 15 seconds
 
     room.subscribePresence(handlePresenceUpdate);
     room.subscribeRoomState(handleRoomStateUpdate);
@@ -287,11 +288,9 @@ async function getAiResponse() {
 function renderPeers() {
     // room.presence is checked to ensure we have the lastActive data.
     if (!room.peers || !room.clientId || !room.presence) return;
-    
-    peersList.innerHTML = '';
 
     const now = Date.now();
-    const activeThreshold = 15000; // 15 seconds, a bit over 2x the 7s poll interval
+    const activeThreshold = 35000; // A bit over 2x the 15s poll interval
 
     const peerIds = Object.keys(room.peers);
     let activePeersCount = 0;
@@ -310,11 +309,12 @@ function renderPeers() {
             id: peerId,
             username: peer.username,
             avatarUrl: peer.avatarUrl,
-            isActive: isActive
+            isActive: isActive,
+            isSelected: peerId === selectedRecipientId // Include selection status in snapshot
         };
     });
 
-    // Sort peers: current user first, then by activity, then alphabetically.
+    // Sort peers to ensure a consistent JSON string for comparison.
     peerInfoList.sort((a, b) => {
         if (a.id === room.clientId) return -1;
         if (b.id === room.clientId) return 1;
@@ -322,6 +322,17 @@ function renderPeers() {
         if (!a.isActive && b.isActive) return 1;
         return a.username.localeCompare(b.username);
     });
+    
+    const newPeerStateJSON = JSON.stringify(peerInfoList);
+
+    // Only re-render if the state has actually changed.
+    if (newPeerStateJSON === lastRenderedPeerStateJSON) {
+        return;
+    }
+    
+    lastRenderedPeerStateJSON = newPeerStateJSON; // Update the state for the next check
+    
+    peersList.innerHTML = '';
     
     peerInfoList.forEach(peerInfo => {
         const li = document.createElement('li');
@@ -346,7 +357,7 @@ function renderPeers() {
             <span>${peerInfo.username}${isMe ? ' (You)' : ''}</span>
         `;
         
-        if (peerInfo.id === selectedRecipientId) {
+        if (peerInfo.isSelected) {
             li.classList.add('selected');
         }
         
