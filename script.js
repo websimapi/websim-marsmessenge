@@ -147,32 +147,36 @@ function renderPeers() {
     
     peersList.innerHTML = '';
     
-    const allPeers = Object.values(room.peers);
+    // Use Object.keys to get peer IDs, as the peer object itself doesn't contain the ID.
+    const peerIds = Object.keys(room.peers);
 
-    allPeers.sort((a, b) => {
-        if (a.id === room.clientId) return -1;
-        if (b.id === room.clientId) return 1;
-        return a.username.localeCompare(b.username);
+    // Sort peers to show the current user first, then alphabetically.
+    peerIds.sort((a, b) => {
+        if (a === room.clientId) return -1;
+        if (b === room.clientId) return 1;
+        return room.peers[a].username.localeCompare(room.peers[b].username);
     });
     
-    allPeers.forEach(peer => {
+    peerIds.forEach(peerId => {
+        const peer = room.peers[peerId];
         const li = document.createElement('li');
-        li.dataset.peerId = peer.id;
-        li.className = 'peer-list-item';
+        li.dataset.peerId = peerId;
         
-        const isMe = peer.id === room.clientId;
+        const isMe = peerId === room.clientId;
         if (isMe) {
-            li.classList.add('peer-list-item-me');
+            li.className = 'peer-list-item-me';
             li.innerHTML = `<img src="${peer.avatarUrl}" class="peer-avatar"> ${peer.username} (You)`;
         } else {
+            li.className = 'peer-list-item';
             li.innerHTML = `<img src="${peer.avatarUrl}" class="peer-avatar"> ${peer.username}`;
         }
         
-        if (peer.id === selectedRecipientId) {
+        if (peerId === selectedRecipientId) {
             li.classList.add('selected');
         }
         
-        li.addEventListener('click', () => selectRecipient(peer.id, peer.username));
+        // Add click listener to all peers, including self, to allow sending to anyone.
+        li.addEventListener('click', () => selectRecipient(peerId, peer.username));
         peersList.appendChild(li);
     });
 }
