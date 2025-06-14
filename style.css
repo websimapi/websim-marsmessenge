@@ -68,9 +68,14 @@ body {
 .online-indicator {
     width: 10px;
     height: 10px;
-    background-color: #2ecc71;
+    background-color: #808080; /* Grey for disconnected */
     border-radius: 50%;
     display: inline-block;
+    transition: background-color 0.3s;
+}
+
+.online-indicator.active {
+    background-color: #2ecc71;
     animation: pulse 2s infinite;
 }
 
@@ -91,11 +96,19 @@ body {
     border-radius: 5px;
     margin-bottom: 5px;
     cursor: pointer;
-    transition: background-color 0.3s, color 0.3s;
+    transition: background-color 0.3s, color 0.3s, opacity 0.3s;
     display: flex;
     align-items: center;
     gap: 10px;
     font-weight: 300;
+}
+
+.peer-list-item.inactive {
+    opacity: 0.6;
+}
+
+.peer-list-item.inactive:hover {
+    opacity: 1;
 }
 
 .peer-list-item:hover {
@@ -118,6 +131,26 @@ body {
     height: 32px;
     border-radius: 50%;
     border: 2px solid var(--border-color);
+}
+
+.peer-status-indicator-container {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.peer-status-indicator {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #808080; /* Grey for inactive/default */
+    border: 2px solid var(--secondary-bg);
+}
+
+.peer-status-indicator.active {
+    background-color: #2ecc71; /* Green for active */
 }
 
 #transmissions-container {

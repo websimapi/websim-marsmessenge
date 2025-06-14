@@ -30,6 +30,7 @@ After handling any attachments as instructed, deliver the message contained in t
 const room = new WebsimSocket();
 
 // --- DOM Elements ---
+const onlineHeader = document.getElementById('online-header');
 const peersList = document.getElementById('peers-list');
 const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
@@ -67,38 +68,14 @@ async function initialize() {
     await room.initialize();
     console.log("Room initialized. Client ID:", room.clientId);
 
+    // Set initial presence and start periodic updates for activity status
+    room.updatePresence({ lastActive: Date.now() });
+    setInterval(() => {
+        room.updatePresence({ lastActive: Date.now() });
+    }, 7000); // 7-second polling as requested
+
     room.subscribePresence(handlePresenceUpdate);
     room.subscribeRoomState(handleRoomStateUpdate);
-
-    // Add message handler for connection events
-    room.onmessage = (event) => {
-        const data = event.data;
-        switch (data.type) {
-            case "connected":
-                console.log(`Client ${data.clientId}, ${data.username} connected`);
-                // Force a peer list re-render when someone connects
-                renderPeers();
-                // Broadcast a presence ping to all other clients to update their UI
-                room.send({
-                    type: "presence_update_ping",
-                    echo: false, // Don't send back to ourselves
-                    triggeredBy: data.clientId
-                });
-                break;
-            case "disconnected":
-                console.log(`Client ${data.clientId}, ${data.username} disconnected`);
-                // Force a peer list re-render when someone disconnects
-                renderPeers();
-                break;
-            case "presence_update_ping":
-                // When we receive a ping from another client, update our peer list
-                console.log(`Received presence update ping from ${data.triggeredBy}`);
-                renderPeers();
-                break;
-            default:
-                console.log("Received event:", data);
-        }
-    };
 
     resetConversation(AI_PROMPT_COMPOSER, "Welcome to Mars Messenger! I'm Mission Control, or MC for short. Talk to me, and I'll help you compose your message. Who are we sending it to today?");
 
@@ -308,42 +285,80 @@ async function getAiResponse() {
 // --- UI Rendering ---
 
 function renderPeers() {
-    if (!room.peers || !room.clientId) return;
+    // room.presence is checked to ensure we have the lastActive data.
+    if (!room.peers || !room.clientId || !room.presence) return;
     
     peersList.innerHTML = '';
-    
-    // Use Object.keys to get peer IDs, as the peer object itself doesn't contain the ID.
-    const peerIds = Object.keys(room.peers);
 
-    // Sort peers to show the current user first, then alphabetically.
-    peerIds.sort((a, b) => {
-        if (a === room.clientId) return -1;
-        if (b === room.clientId) return 1;
-        return room.peers[a].username.localeCompare(room.peers[b].username);
+    const now = Date.now();
+    const activeThreshold = 15000; // 15 seconds, a bit over 2x the 7s poll interval
+
+    const peerIds = Object.keys(room.peers);
+    let activePeersCount = 0;
+
+    const peerInfoList = peerIds.map(peerId => {
+        const peer = room.peers[peerId];
+        const presence = room.presence[peerId] || {};
+        const lastActive = presence.lastActive || 0;
+        const isActive = (now - lastActive) < activeThreshold;
+
+        if (isActive) {
+            activePeersCount++;
+        }
+
+        return {
+            id: peerId,
+            username: peer.username,
+            avatarUrl: peer.avatarUrl,
+            isActive: isActive
+        };
+    });
+
+    // Sort peers: current user first, then by activity, then alphabetically.
+    peerInfoList.sort((a, b) => {
+        if (a.id === room.clientId) return -1;
+        if (b.id === room.clientId) return 1;
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        return a.username.localeCompare(b.username);
     });
     
-    peerIds.forEach(peerId => {
-        const peer = room.peers[peerId];
+    peerInfoList.forEach(peerInfo => {
         const li = document.createElement('li');
-        li.dataset.peerId = peerId;
+        li.dataset.peerId = peerInfo.id;
         
-        const isMe = peerId === room.clientId;
+        const isMe = peerInfo.id === room.clientId;
         if (isMe) {
             li.className = 'peer-list-item-me';
-            li.innerHTML = `<img src="${peer.avatarUrl}" class="peer-avatar"> ${peer.username} (You)`;
         } else {
             li.className = 'peer-list-item';
-            li.innerHTML = `<img src="${peer.avatarUrl}" class="peer-avatar"> ${peer.username}`;
+        }
+
+        if (!peerInfo.isActive) {
+            li.classList.add('inactive');
         }
         
-        if (peerId === selectedRecipientId) {
+        li.innerHTML = `
+            <div class="peer-status-indicator-container">
+                <img src="${peerInfo.avatarUrl}" class="peer-avatar">
+                <span class="peer-status-indicator ${peerInfo.isActive ? 'active' : ''}"></span>
+            </div>
+            <span>${peerInfo.username}${isMe ? ' (You)' : ''}</span>
+        `;
+        
+        if (peerInfo.id === selectedRecipientId) {
             li.classList.add('selected');
         }
         
         // Add click listener to all peers, including self, to allow sending to anyone.
-        li.addEventListener('click', () => selectRecipient(peerId, peer.username));
+        li.addEventListener('click', () => selectRecipient(peerInfo.id, peerInfo.username));
         peersList.appendChild(li);
     });
+
+    // Update the main online status header
+    if (onlineHeader) {
+        onlineHeader.innerHTML = `<span class="online-indicator active"></span>Online (${activePeersCount})`;
+    }
 }
 
 function selectRecipient(peerId, username) {
